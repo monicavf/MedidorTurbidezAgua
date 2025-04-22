@@ -1,0 +1,140 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// Configurações do Wi-Fi
+const char* ssid = "FV";        
+const char* password = "##071187";   
+
+// Configurações do MQTT
+const char* mqttServer = "broker.hivemq.com";  
+const int mqttPort = 1883;
+const char* mqttTurbidez = "sensor/turbidez";
+const char* mqttEstado = "sensor/estado";
+const char* mqttLED = "sensor/led";
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// Configuração do OLED
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1  
+#define I2C_SDA 21  
+#define I2C_SCL 22  
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Pinos do sensor e LED RGB
+#define sensorPin 36  // Sensor no pino GPIO 36
+#define LED_RED 25
+#define LED_GREEN 26
+#define LED_BLUE 27
+
+int leitura; // Variável para armazenar a leitura do sensor
+
+// Função para conectar ao Wi-Fi
+void setupWiFi() {
+    Serial.print("Conectando-se ao Wi-Fi ");
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.print(".");
+    }
+    Serial.println("\nWi-Fi conectado!");
+}
+
+// Função para conectar ao MQTT
+void reconnectMQTT() {
+    while (!client.connected()) {
+        Serial.print("Conectando ao MQTT...");
+        if (client.connect("ESP32_Turbidez")) {
+            Serial.println(" Conectado!");
+        } else {
+            Serial.print(" Falha! Código: ");
+            Serial.println(client.state());
+            delay(2000);
+        }
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("Falha ao inicializar o display OLED");
+        while (true);
+    }
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.println("Iniciando...");
+    display.display();
+
+    pinMode(sensorPin, INPUT);
+    pinMode(LED_RED, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+
+    setupWiFi();
+    client.setServer(mqttServer, mqttPort);
+
+    delay(2000);
+}
+
+void loop() {
+    if (!client.connected()) {
+        reconnectMQTT();
+    }
+    client.loop();
+
+    leitura = analogRead(sensorPin);  // Lê o sensor no pino GPIO 36
+
+    Serial.print("Turbidez: ");
+    Serial.println(leitura);
+
+    // Exibir no OLED "TURBIDEZ: [valor]"
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setCursor(10, 15);
+    display.print("TURBIDEZ:");
+    display.setTextSize(2);
+    display.setCursor(30, 40);
+    display.print(leitura);
+    display.display();
+
+    // Definir estado da água e LED RGB
+    String estadoAgua;
+    String estadoLED;
+
+    if (leitura > 1500) {
+        digitalWrite(LED_RED, LOW);
+        digitalWrite(LED_GREEN, HIGH);
+        digitalWrite(LED_BLUE, LOW);
+        estadoAgua = "LIMPA";
+        estadoLED = "LED VERDE";
+    } else if (leitura >= 1300 && leitura <= 1500) {
+        digitalWrite(LED_RED, HIGH);
+        digitalWrite(LED_GREEN, HIGH);
+        digitalWrite(LED_BLUE, LOW);
+        estadoAgua = "MODERADA";
+        estadoLED = "LED AMARELO";
+    } else {
+        digitalWrite(LED_RED, HIGH);
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_BLUE, LOW);
+        estadoAgua = "SUJA";
+        estadoLED = "LED VERMELHO";
+    }
+
+    // Publica os dados no MQTT
+    client.publish(mqttTurbidez, String(leitura).c_str());
+    client.publish(mqttEstado, estadoAgua.c_str());
+    client.publish(mqttLED, estadoLED.c_str());
+
+    delay(500);
+}
