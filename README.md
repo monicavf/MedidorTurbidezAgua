@@ -32,9 +32,9 @@ Este projeto utiliza um ESP32, um sensor de turbidez, um display OLED, um LED RG
 - Broker -> broker.hivemq.com
 - Porta -> 1883
 - Tópicos publicados:
-   sensor/turbidez -> valor da turbidez
-   sensor/estado -> estado da água (Limpa, Moderada ou Suja)
-   sensor/led -> cor do LED correspondente
+   - sensor/turbidez -> valor da turbidez
+   - sensor/estado -> estado da água (Limpa, Moderada ou Suja)
+   - sensor/led -> cor do LED correspondente
 
 ## CLASSIFICAÇÃO DA TURBIDEZ
 | Leitura Analógica | Estado da Água | Cor do LED |
